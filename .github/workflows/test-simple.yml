@@ -1,0 +1,55 @@
+name: Simple Test Workflow
+
+on:
+  push:
+    branches: [ feat/fix-mcpb-workflow ]
+  workflow_dispatch:
+
+jobs:
+  test-simple:
+    runs-on: windows-latest
+    timeout-minutes: 5
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: List files
+      shell: powershell
+      run: |
+        Write-Host "Repository contents:" -ForegroundColor Cyan
+        Get-ChildItem -Recurse -Name | Sort-Object
+        
+    - name: Check Node.js
+      shell: powershell  
+      run: |
+        Write-Host "Node.js version:" -ForegroundColor Green
+        node --version
+        Write-Host "NPM version:" -ForegroundColor Green
+        npm --version
+
+    - name: Test package.json
+      shell: powershell
+      run: |
+        Write-Host "Package.json contents:" -ForegroundColor Yellow
+        if (Test-Path "package.json") {
+          Get-Content "package.json" | Write-Host
+        } else {
+          Write-Host "package.json not found!" -ForegroundColor Red
+        }
+
+    - name: Test build script
+      shell: powershell
+      run: |
+        Write-Host "Testing basic npm operations..." -ForegroundColor Cyan
+        
+        if (Test-Path "scripts/build-mcpb.js") {
+          Write-Host "Build script found" -ForegroundColor Green
+        } else {
+          Write-Host "Build script NOT found" -ForegroundColor Red
+        }
+        
+        Write-Host "Environment variables:" -ForegroundColor Yellow
+        Write-Host "GITHUB_REF: $env:GITHUB_REF"
+        Write-Host "GITHUB_REF_NAME: $env:GITHUB_REF_NAME"
+        Write-Host "GITHUB_RUN_NUMBER: $env:GITHUB_RUN_NUMBER"
