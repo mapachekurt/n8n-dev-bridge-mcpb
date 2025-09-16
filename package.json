@@ -13,7 +13,6 @@
     "credential-setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows-credentials.ps1"
   },
   "devDependencies": {
-    "@anthropic-ai/mcpb": "^0.1.0",
     "eslint": "^8.57.0",
     "vitest": "^1.0.0",
     "ajv": "^8.12.0",

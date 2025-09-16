@@ -85,6 +85,7 @@ jobs:
           Write-Host "✓ MCPB bundle created successfully!" -ForegroundColor Green
           Write-Host "  File: $bundleFile" -ForegroundColor Gray
           Write-Host "  Size: $([math]::Round($bundleSize / 1KB, 2)) KB" -ForegroundColor Gray
+          Write-Host "  Note: Simulated bundle format (until MCPB CLI available)" -ForegroundColor Yellow
           
           # Set output for artifact upload
           echo "BUNDLE_PATH=$bundleFile" >> $env:GITHUB_ENV
