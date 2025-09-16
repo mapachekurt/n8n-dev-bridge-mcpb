@@ -2,485 +2,238 @@ name: Build n8n-dev-bridge MCPB Bundle
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main, develop, feat/* ]
     tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  NODE_VERSION: '18'
+  MCPB_NAME: 'n8n-dev-bridge'
+  AUTH_TOKEN: 'Bearer zxT94kE8pLr62UNqV1dCB'
+
 jobs:
   build-mcpb:
     runs-on: windows-latest
+    timeout-minutes: 15
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 1
 
-    - name: Setup Node.js
+    - name: Setup Node.js ${{ env.NODE_VERSION }}
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: ${{ env.NODE_VERSION }}
+        registry-url: 'https://registry.npmjs.org/'
         cache: 'npm'
 
-    - name: Install MCPB CLI
-      run: npm install -g @anthropic-ai/mcpb
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
 
-    - name: Create bundle directory structure
+    - name: Install dependencies
+      run: |
+        npm ci --prefer-offline --no-audit
+        Write-Host "Dependencies installed successfully" -ForegroundColor Green
+      shell: powershell
+
+    - name: Set version from ref
       shell: powershell
       run: |
-        New-Item -ItemType Directory -Force -Path "bundle"
-        New-Item -ItemType Directory -Force -Path "bundle/server"
-        Write-Host "Bundle directory structure created"
-
-    - name: Generate manifest.json
-      shell: powershell
-      run: |
-        $manifest = @{
-          mcpb_version = "0.1"
-          name = "n8n-dev-bridge"
-          version = "${{ github.ref_name != '' && github.ref_name || '1.0.0-dev' }}"
-          description = "n8n Development Bridge - Remote MCP server via Railway with HTTP transport and Bearer token authentication"
-          author = @{
-            name = "Kurt Anderson"
-            url = "https://github.com/${{ github.repository }}"
-          }
-          license = "MIT"
-          homepage = "https://github.com/${{ github.repository }}"
-          repository = "https://github.com/${{ github.repository }}"
-          keywords = @("n8n", "mcp-remote", "railway", "workflow-automation", "http-transport")
-          server = @{
-            type = "node"
-            entry_point = "server/index.js"
-            mcp_config = @{
-              command = "npx"
-              args = @(
-                "-y",
-                "mcp-remote@latest", 
-                "https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp",
-                "--transport", "http-only",
-                "--header", "Authorization:`${AUTH_HEADER_DEV}"
-              )
-              env = @{}
-            }
-          }
-          capabilities = @{
-            tools = @(
-              @{
-                name = "list_nodes"
-                description = "List available n8n nodes with filtering options"
-              },
-              @{
-                name = "search_nodes"
-                description = "Search n8n nodes by keyword"
-              },
-              @{
-                name = "get_node_info"
-                description = "Get detailed information about specific n8n nodes"
-              },
-              @{
-                name = "get_node_documentation"
-                description = "Get readable documentation with examples for n8n nodes"
-              },
-              @{
-                name = "validate_node_operation"
-                description = "Validate n8n node configurations"
-              },
-              @{
-                name = "n8n_create_workflow"
-                description = "Create new n8n workflows"
-              },
-              @{
-                name = "n8n_list_workflows"
-                description = "List all workflows with filtering"
-              },
-              @{
-                name = "n8n_get_workflow"
-                description = "Retrieve existing workflows by ID"
-              },
-              @{
-                name = "n8n_update_full_workflow"
-                description = "Update complete workflows"
-              },
-              @{
-                name = "n8n_validate_workflow"
-                description = "Validate workflow structure and configuration"
-              },
-              @{
-                name = "search_templates"
-                description = "Search community workflow templates"
-              },
-              @{
-                name = "get_template"
-                description = "Get complete workflow template by ID"
-              },
-              @{
-                name = "n8n_health_check"
-                description = "Check n8n instance connectivity and status"
-              }
-            )
-            resources = @(
-              @{
-                name = "n8n://workflows"
-                description = "Access to n8n workflows via Railway HTTP API"
-              },
-              @{
-                name = "n8n://nodes"
-                description = "Access to n8n node library and documentation"
-              },
-              @{
-                name = "n8n://templates"
-                description = "Access to community workflow templates"
-              }
-            )
-          }
-          configuration = @{
-            required = true
-            properties = @{
-              auth_header_dev = @{
-                type = "string"
-                description = "Bearer token for n8n Railway API authentication"
-                sensitive = $true
-                required = $true
-                default = ""
-              }
-            }
-          }
-          authentication = @{
-            type = "bearer_token"
-            description = "Bearer token authentication for Railway-hosted n8n instance"
-            storage = "os_keychain"
-          }
-          permissions = @{
-            network = @{
-              allowed_hosts = @(
-                "czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app",
-                "*.railway.app",
-                "*.up.railway.app"
-              )
-            }
-          }
-          metadata = @{
-            category = "development"
-            tags = @("n8n", "railway", "mcp-remote", "http-transport", "bearer-auth")
-            compatibility = @{
-              claude_desktop = ">=0.11.0"
-              node = ">=18.0.0"
-            }
-            transport = @{
-              protocol = "http"
-              authentication = "bearer"
-              endpoint = "https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp"
-            }
-          }
+        $version = if ($env:GITHUB_REF -match "refs/tags/v(.+)") { 
+          $matches[1] 
+        } elseif ($env:GITHUB_REF_NAME) { 
+          "1.0.0-$($env:GITHUB_REF_NAME -replace '[^a-zA-Z0-9]', '')" 
+        } else { 
+          "1.0.0-dev.$env:GITHUB_RUN_NUMBER" 
         }
         
-        $manifest | ConvertTo-Json -Depth 10 | Out-File -FilePath "bundle/manifest.json" -Encoding UTF8
-        Write-Host "Generated manifest.json"
+        Write-Host "Setting version: $version" -ForegroundColor Cyan
+        echo "MCPB_VERSION=$version" >> $env:GITHUB_ENV
 
-    - name: Generate package.json
+    - name: Run automated MCPB build
       shell: powershell
+      env:
+        GITHUB_REF_NAME: ${{ env.MCPB_VERSION }}
       run: |
-        $package = @{
-          name = "n8n-dev-bridge-mcpb"
-          version = "${{ github.ref_name != '' && github.ref_name || '1.0.0-dev' }}"
-          description = "n8n Development Bridge MCPB Bundle - Railway HTTP transport"
-          main = "server/index.js"
-          type = "module"
-          scripts = @{
-            start = "node server/index.js"
-          }
-          dependencies = @{
-            "mcp-remote" = "^1.0.0"
-          }
-          engines = @{
-            node = ">=18.0.0"
-          }
-          keywords = @("n8n", "mcp", "mcpb", "railway", "http-transport")
-          author = "Kurt Anderson"
-          license = "MIT"
-        }
+        Write-Host "Starting n8n-dev-bridge MCPB build process..." -ForegroundColor Cyan
+        Write-Host "Version: $env:MCPB_VERSION" -ForegroundColor Yellow
         
-        $package | ConvertTo-Json -Depth 5 | Out-File -FilePath "bundle/package.json" -Encoding UTF8
-        Write-Host "Generated package.json"
-
-    - name: Generate server implementation
-      shell: powershell
-      run: |
-        $serverCode = @'
-#!/usr/bin/env node
-
-/**
- * n8n Development Bridge MCPB Server
- * 
- * Proxies to Railway-hosted n8n MCP server via mcp-remote
- * with HTTP transport and Bearer token authentication.
- */
-
-import { spawn } from 'child_process';
-import { createWriteStream } from 'fs';
-
-class N8nDevBridgeMCPB {
-  constructor() {
-    this.remoteProcess = null;
-    this.isRunning = false;
-    
-    // Get auth token from environment or Windows Credential Manager
-    this.authToken = this.getAuthToken();
-  }
-
-  getAuthToken() {
-    // First check environment variable
-    if (process.env.AUTH_HEADER_DEV) {
-      return process.env.AUTH_HEADER_DEV;
-    }
-    
-    // In a real implementation, you would read from Windows Credential Manager
-    // For MCPB bundles, this is handled by Claude Desktop's secure storage
-    return process.env.AUTH_HEADER_DEV || 'Bearer ${AUTH_HEADER_DEV}';
-  }
-
-  async start() {
-    try {
-      // Start mcp-remote with HTTP transport to Railway
-      const args = [
-        '-y',
-        'mcp-remote@latest',
-        'https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp',
-        '--transport', 'http-only',
-        '--header', `Authorization:${this.authToken}`
-      ];
-
-      this.remoteProcess = spawn('npx', args, {
-        stdio: ['pipe', 'pipe', 'inherit'],
-        env: {
-          ...process.env,
-          AUTH_HEADER_DEV: this.authToken
-        }
-      });
-
-      // Set up bidirectional communication
-      process.stdin.pipe(this.remoteProcess.stdin);
-      this.remoteProcess.stdout.pipe(process.stdout);
-
-      this.isRunning = true;
-
-      // Handle process lifecycle
-      this.remoteProcess.on('exit', (code) => {
-        this.isRunning = false;
-        if (code !== 0) {
-          console.error(`n8n-dev-bridge remote process exited with code ${code}`);
-          process.exit(code);
-        }
-      });
-
-      this.remoteProcess.on('error', (error) => {
-        console.error('Failed to start n8n-dev-bridge remote process:', error.message);
-        process.exit(1);
-      });
-
-      // Graceful shutdown
-      process.on('SIGTERM', this.shutdown.bind(this));
-      process.on('SIGINT', this.shutdown.bind(this));
-      
-    } catch (error) {
-      console.error('Error starting n8n-dev-bridge server:', error.message);
-      process.exit(1);
-    }
-  }
-
-  async shutdown() {
-    if (this.remoteProcess && this.isRunning) {
-      this.remoteProcess.kill('SIGTERM');
-    }
-    process.exit(0);
-  }
-}
-
-// Start the server
-const server = new N8nDevBridgeMCPB();
-server.start().catch((error) => {
-  console.error('Failed to start n8n-dev-bridge MCPB server:', error.message);
-  process.exit(1);
-});
-'@
-        
-        $serverCode | Out-File -FilePath "bundle/server/index.js" -Encoding UTF8
-        Write-Host "Generated server/index.js"
-
-    - name: Install bundle dependencies
-      working-directory: ./bundle
-      run: npm install
-
-    - name: Validate bundle structure
-      working-directory: ./bundle
-      shell: powershell
-      run: |
-        # Check required files exist
-        $requiredFiles = @("manifest.json", "package.json", "server/index.js")
-        foreach ($file in $requiredFiles) {
-          if (-not (Test-Path $file)) {
-            throw "Required file missing: $file"
-          }
-        }
-        
-        # Validate JSON files
         try {
-          Get-Content "manifest.json" | ConvertFrom-Json | Out-Null
-          Get-Content "package.json" | ConvertFrom-Json | Out-Null
-          Write-Host "Bundle structure validation passed"
-        } catch {
-          throw "JSON validation failed: $($_.Exception.Message)"
-        }
-
-    - name: Build MCPB bundle
-      working-directory: ./bundle
-      shell: powershell
-      run: |
-        # Build the MCPB bundle
-        mcpb pack
-        
-        # Verify the bundle was created
-        if (Test-Path "n8n-dev-bridge.mcpb") {
-          $bundleSize = (Get-Item "n8n-dev-bridge.mcpb").Length
-          Write-Host "Successfully created n8n-dev-bridge.mcpb (Size: $bundleSize bytes)"
+          # Run the build script
+          npm run build
           
-          # List bundle contents for verification
-          Write-Host "Bundle contents:"
-          mcpb inspect n8n-dev-bridge.mcpb 2>$null || Write-Host "Bundle created successfully"
-        } else {
-          throw "Failed to create MCPB bundle"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Build script failed with exit code $LASTEXITCODE"
+          }
+          
+          # Verify the bundle was created
+          $bundleFile = "$env:MCPB_NAME.mcpb"
+          if (-not (Test-Path $bundleFile)) {
+            throw "MCPB bundle file not found: $bundleFile"
+          }
+          
+          $bundleSize = (Get-Item $bundleFile).Length
+          Write-Host "✓ MCPB bundle created successfully!" -ForegroundColor Green
+          Write-Host "  File: $bundleFile" -ForegroundColor Gray
+          Write-Host "  Size: $([math]::Round($bundleSize / 1KB, 2)) KB" -ForegroundColor Gray
+          
+          # Set output for artifact upload
+          echo "BUNDLE_PATH=$bundleFile" >> $env:GITHUB_ENV
+          echo "BUNDLE_SIZE=$bundleSize" >> $env:GITHUB_ENV
+          
+        } catch {
+          Write-Error "Build failed: $($_.Exception.Message)"
+          Write-Host "Build logs:" -ForegroundColor Yellow
+          Get-Content "bundle/npm-debug.log" -ErrorAction SilentlyContinue
+          exit 1
         }
 
-    - name: Upload MCPB bundle artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: n8n-dev-bridge-mcpb-${{ github.run_number }}
-        path: bundle/n8n-dev-bridge.mcpb
-        retention-days: 30
-
-    - name: Create Windows Credential Manager script
+    - name: Generate installation files
       shell: powershell
       run: |
-        $credScript = @'
-# Windows Credential Manager Setup Script
-# Run this script as Administrator to store the auth token securely
-
-param(
-    [Parameter(Mandatory=$true)]
-    [string]$AuthToken
-)
-
-$targetName = "n8n-dev-bridge-auth"
-$userName = "AUTH_HEADER_DEV"
-
-try {
-    # Remove existing credential if it exists
-    cmdkey /delete:$targetName 2>$null
-    
-    # Add new credential
-    echo $AuthToken | cmdkey /generic:$targetName /user:$userName /pass
-    
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "Successfully stored auth token in Windows Credential Manager"
-        Write-Host "Target: $targetName"
-        Write-Host "Username: $userName"
-        Write-Host ""
-        Write-Host "The token is now securely stored and will be used by the MCPB bundle."
-        Write-Host "Your original token: Bearer zxT94kE8pLr62UNqV1dCB"
-    } else {
-        Write-Error "Failed to store credential in Windows Credential Manager"
-    }
-} catch {
-    Write-Error "Error: $($_.Exception.Message)"
-}
-'@
+        Write-Host "Generating installation and setup files..." -ForegroundColor Cyan
         
-        $credScript | Out-File -FilePath "setup-windows-credentials.ps1" -Encoding UTF8
-        Write-Host "Created Windows Credential Manager setup script"
-
-    - name: Upload credential setup script
-      uses: actions/upload-artifact@v4
-      with:
-        name: windows-credential-setup-${{ github.run_number }}
-        path: setup-windows-credentials.ps1
-        retention-days: 30
-
-    - name: Generate installation instructions
-      shell: powershell
-      run: |
+        # Ensure credential setup script is available
+        if (Test-Path "scripts/setup-windows-credentials.ps1") {
+          Copy-Item "scripts/setup-windows-credentials.ps1" "setup-windows-credentials.ps1"
+          Write-Host "✓ Credential setup script ready" -ForegroundColor Green
+        } else {
+          Write-Warning "Credential setup script not found"
+        }
+        
+        # Generate installation guide
         $instructions = @"
-# n8n-dev-bridge MCPB Bundle Installation
+# n8n-dev-bridge MCPB Bundle - Installation Guide
 
-## Files in this release:
-- ``n8n-dev-bridge.mcpb`` - Ready-to-install Claude Desktop extension
-- ``setup-windows-credentials.ps1`` - Script to store auth token securely
+## Quick Installation
+1. Download ``$env:MCPB_NAME.mcpb`` and ``setup-windows-credentials.ps1``
+2. Run PowerShell as Administrator: ``.\setup-windows-credentials.ps1``
+3. Drag ``$env:MCPB_NAME.mcpb`` into Claude Desktop → Settings → Extensions
+4. Remove old JSON configuration from ``claude_desktop_config.json``
 
-## Installation Steps:
+## What This Bundle Does
+Converts your n8n-dev-bridge JSON configuration to a secure MCPB bundle:
 
-### 1. Set up Windows Credential Manager (REQUIRED)
-Run PowerShell as Administrator and execute:
-``````powershell
-.\setup-windows-credentials.ps1 -AuthToken "Bearer zxT94kE8pLr62UNqV1dCB"
-``````
+**Features:**
+- Secure Bearer token storage via Windows Credential Manager
+- One-click installation in Claude Desktop
+- HTTP transport to Railway-hosted n8n instance
+- Full n8n workflow and node management capabilities
+- Automatic error handling and diagnostics
 
-### 2. Install MCPB Bundle in Claude Desktop
-1. Download the ``n8n-dev-bridge.mcpb`` file
-2. Open Claude Desktop
-3. Go to Settings → Extensions
-4. Drag the ``.mcpb`` file into the "Drag .MCPB or .DXT files here" area
-5. Follow installation prompts
+**Configuration Details:**
+- Endpoint: ``https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp``
+- Transport: HTTP-only via mcp-remote
+- Authentication: Bearer token (securely stored)
+- Version: $env:MCPB_VERSION
 
-### 3. Remove old JSON configuration
-Edit your Claude Desktop config file:
-``````json
-{
-  "mcpServers": {
-    // Remove the entire n8n-dev-bridge section
-  }
-}
-``````
-
-### 4. Test the installation
-In Claude Desktop, try:
+## Testing Your Installation
+After installation, test in Claude Desktop with:
 - "Check n8n health status"
 - "List my n8n workflows" 
 - "Show available n8n nodes"
 
-## Configuration Details:
-- **Transport**: HTTP-only via mcp-remote
-- **Authentication**: Bearer token via Windows Credential Manager
-- **Endpoint**: https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp
-- **Security**: Tokens stored in OS keychain (Windows Credential Manager)
+## Troubleshooting
+- Ensure PowerShell is running as Administrator for credential setup
+- Check Windows Credential Manager for stored tokens
+- Report issues: https://github.com/mapachekurt/n8n-dev-bridge-mcpb/issues
 
-Built from commit: ${{ github.sha }}
-Build number: ${{ github.run_number }}
+Built: $(Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC")
+Commit: $env:GITHUB_SHA
+Build: #$env:GITHUB_RUN_NUMBER
 "@
         
         $instructions | Out-File -FilePath "INSTALLATION.md" -Encoding UTF8
+        Write-Host "✓ Installation guide generated" -ForegroundColor Green
 
-    - name: Upload installation instructions
+    - name: Upload MCPB bundle artifacts
       uses: actions/upload-artifact@v4
       with:
-        name: installation-instructions-${{ github.run_number }}
-        path: INSTALLATION.md
-        retention-days: 30
-
-    - name: Create release on tag push
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          bundle/n8n-dev-bridge.mcpb
+        name: n8n-dev-bridge-mcpb-${{ env.MCPB_VERSION }}-build${{ github.run_number }}
+        path: |
+          ${{ env.BUNDLE_PATH }}
           setup-windows-credentials.ps1
           INSTALLATION.md
-        name: n8n-dev-bridge MCPB Bundle ${{ github.ref_name }}
+        retention-days: 30
+        compression-level: 9
+
+    - name: Create GitHub Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          ${{ env.BUNDLE_PATH }}
+          setup-windows-credentials.ps1
+          INSTALLATION.md
+        name: n8n-dev-bridge MCPB Bundle v${{ env.MCPB_VERSION }}
+        tag_name: ${{ github.ref_name }}
         body: |
-          Automated build of n8n-dev-bridge MCPB bundle for Claude Desktop.
-          
-          **Ready for drag-and-drop installation!**
-          
-          See INSTALLATION.md for complete setup instructions including Windows Credential Manager configuration.
+          # n8n-dev-bridge MCPB Bundle v${{ env.MCPB_VERSION }}
+
+          **Ready-to-install Claude Desktop extension for n8n Railway integration**
+
+          ## 📦 Files in this release:
+          - `${{ env.MCPB_NAME }}.mcpb` - MCPB bundle for Claude Desktop (${{ env.BUNDLE_SIZE }} bytes)
+          - `setup-windows-credentials.ps1` - Windows Credential Manager setup script
+          - `INSTALLATION.md` - Complete installation and usage guide
+
+          ## 🚀 Quick Start:
+          1. **Download** all three files from this release
+          2. **Run** `setup-windows-credentials.ps1` as Administrator  
+          3. **Install** the `.mcpb` file in Claude Desktop Extensions
+          4. **Remove** old JSON config from `claude_desktop_config.json`
+
+          ## ✨ Features:
+          - 🔐 Secure Bearer token storage (Windows Credential Manager)
+          - 🌐 HTTP transport to Railway-hosted n8n instance  
+          - 🛠️ Full n8n workflow and node management
+          - 🎯 One-click installation and updates
+          - 📊 Enhanced error handling and diagnostics
+
+          ## 🔗 Configuration:
+          - **Endpoint:** `https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp`
+          - **Transport:** HTTP-only via mcp-remote
+          - **Auth:** Bearer token (Windows secure storage)
+
+          See `INSTALLATION.md` for detailed setup instructions and troubleshooting.
+
+          ---
+          **Build Info:** Commit ${{ github.sha }} | Build #${{ github.run_number }} | $(date -u +"%Y-%m-%d %H:%M:%S UTC")
         draft: false
-        prerelease: false
+        prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+        generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build Summary
+      shell: powershell
+      run: |
+        Write-Host ""
+        Write-Host "🎉 n8n-dev-bridge MCPB Build Summary" -ForegroundColor Green
+        Write-Host "====================================" -ForegroundColor Green
+        Write-Host "Version: $env:MCPB_VERSION" -ForegroundColor Cyan
+        Write-Host "Bundle: $env:BUNDLE_PATH ($env:BUNDLE_SIZE bytes)" -ForegroundColor Cyan
+        Write-Host "Repository: https://github.com/mapachekurt/n8n-dev-bridge-mcpb" -ForegroundColor Cyan
+        Write-Host ""
+        
+        if ($env:GITHUB_REF -match "refs/tags/v") {
+          Write-Host "🚀 Release created: https://github.com/mapachekurt/n8n-dev-bridge-mcpb/releases/tag/$env:GITHUB_REF_NAME" -ForegroundColor Green
+        } else {
+          Write-Host "💾 Artifact uploaded to: https://github.com/mapachekurt/n8n-dev-bridge-mcpb/actions/runs/$env:GITHUB_RUN_ID" -ForegroundColor Yellow
+        }
+        
+        Write-Host ""
+        Write-Host "Next steps for users:" -ForegroundColor White
+        Write-Host "1. Download the MCPB bundle and setup script" -ForegroundColor Gray
+        Write-Host "2. Run setup-windows-credentials.ps1 as Administrator" -ForegroundColor Gray  
+        Write-Host "3. Install .mcpb file in Claude Desktop Extensions" -ForegroundColor Gray
+        Write-Host "4. Test with: 'Check n8n health status'" -ForegroundColor Gray

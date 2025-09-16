@@ -1,0 +1,52 @@
+{
+  "name": "n8n-dev-bridge-mcpb",
+  "version": "1.0.0",
+  "description": "Automated MCPB bundle builder for n8n-dev-bridge MCP server - Railway HTTP transport with Bearer authentication",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-mcpb.js",
+    "test": "npm run lint && npm run unit",
+    "lint": "eslint .",
+    "unit": "vitest",
+    "prepack": "npm run build",
+    "dev": "node scripts/dev-server.js",
+    "credential-setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-windows-credentials.ps1"
+  },
+  "devDependencies": {
+    "@anthropic-ai/mcpb": "^0.1.0",
+    "eslint": "^8.57.0",
+    "vitest": "^1.0.0",
+    "ajv": "^8.12.0",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.3.1"
+  },
+  "dependencies": {
+    "mcp-remote": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mapachekurt/n8n-dev-bridge-mcpb.git"
+  },
+  "homepage": "https://github.com/mapachekurt/n8n-dev-bridge-mcpb",
+  "bugs": {
+    "url": "https://github.com/mapachekurt/n8n-dev-bridge-mcpb/issues"
+  },
+  "keywords": ["n8n", "mcp", "mcpb", "railway", "claude-desktop", "workflow-automation", "http-transport", "bearer-auth"],
+  "author": "Kurt Anderson <mapachekurt@users.noreply.github.com>",
+  "license": "MIT",
+  "files": [
+    "scripts/",
+    "templates/",
+    "bundle/",
+    "dist/"
+  ],
+  "mcpb": {
+    "name": "n8n-dev-bridge",
+    "endpoint": "https://czlonkowskin8n-mcp-railwaylatest-dev.up.railway.app/mcp",
+    "transport": "http-only",
+    "auth": "bearer"
+  }
+}
