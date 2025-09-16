@@ -29,25 +29,27 @@ jobs:
       with:
         node-version: ${{ env.NODE_VERSION }}
         registry-url: 'https://registry.npmjs.org/'
-        cache: 'npm'
-
-    - name: Cache dependencies
-      uses: actions/cache@v4
-      with:
-        path: ~/.npm
-        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
-        restore-keys: |
-          ${{ runner.os }}-node-
 
     - name: Install dependencies
-      run: |
-        npm ci --prefer-offline --no-audit
-        Write-Host "Dependencies installed successfully" -ForegroundColor Green
       shell: powershell
+      run: |
+        Write-Host "Installing dependencies..." -ForegroundColor Cyan
+        try {
+          npm ci --prefer-offline --no-audit
+          Write-Host "Dependencies installed successfully" -ForegroundColor Green
+        } catch {
+          Write-Host "npm ci failed, trying npm install..." -ForegroundColor Yellow
+          npm install
+          Write-Host "Dependencies installed via npm install" -ForegroundColor Green
+        }
 
     - name: Set version from ref
       shell: powershell
       run: |
+        Write-Host "Debug - GITHUB_REF: $env:GITHUB_REF" -ForegroundColor Yellow
+        Write-Host "Debug - GITHUB_REF_NAME: $env:GITHUB_REF_NAME" -ForegroundColor Yellow
+        Write-Host "Debug - GITHUB_RUN_NUMBER: $env:GITHUB_RUN_NUMBER" -ForegroundColor Yellow
+        
         $version = if ($env:GITHUB_REF -match "refs/tags/v(.+)") { 
           $matches[1] 
         } elseif ($env:GITHUB_REF_NAME) { 
@@ -58,22 +60,22 @@ jobs:
         
         Write-Host "Setting version: $version" -ForegroundColor Cyan
         echo "MCPB_VERSION=$version" >> $env:GITHUB_ENV
+        Write-Host "Version set in environment" -ForegroundColor Green
 
     - name: Run automated MCPB build
       shell: powershell
-      env:
-        GITHUB_REF_NAME: ${{ env.MCPB_VERSION }}
       run: |
         Write-Host "Starting n8n-dev-bridge MCPB build process..." -ForegroundColor Cyan
         Write-Host "Version: $env:MCPB_VERSION" -ForegroundColor Yellow
         
         try {
-          # Run the build script
+          Write-Host "Running npm run build..." -ForegroundColor White
           npm run build
           
           if ($LASTEXITCODE -ne 0) {
             throw "Build script failed with exit code $LASTEXITCODE"
           }
+          Write-Host "Build script completed successfully" -ForegroundColor Green
           
           # Verify the bundle was created
           $bundleFile = "$env:MCPB_NAME.mcpb"
